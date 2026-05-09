@@ -1,3 +1,4 @@
+/*
 import { StatusCodes } from 'http-status-codes';
 import { Expert } from '../models/Expert.js';
 import { Booking } from '../models/Booking.js';
@@ -63,4 +64,108 @@ export const getExpertById = async (req, res) => {
     ...expert.toObject(),
     slotsByDate
   });
+};*/
+
+import { StatusCodes } from 'http-status-codes';
+import { Expert } from '../models/Expert.js';
+import { Booking } from '../models/Booking.js';
+
+const toInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+export const getExperts = async (req, res) => {
+  try {
+    const page = Math.max(toInt(req.query.page, 1), 1);
+    const limit = Math.max(toInt(req.query.limit, 10), 1);
+    const skip = (page - 1) * limit;
+
+    const query = {};
+
+    if (req.query.search) {
+      query.name = { $regex: req.query.search, $options: 'i' };
+    }
+
+    if (req.query.category) {
+      query.category = req.query.category;
+    }
+
+    console.log('Fetching experts...');
+
+    const [items, total] = await Promise.all([
+      Expert.find(query)
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(limit),
+
+      Expert.countDocuments(query)
+    ]);
+
+    console.log('Experts fetched');
+
+    res.status(StatusCodes.OK).json({
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get Experts Error:', error);
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+export const getExpertById = async (req, res) => {
+  try {
+    console.log('Fetching expert by ID...');
+
+    const expert = await Expert.findById(req.params.id);
+
+    if (!expert) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Expert not found'
+      });
+    }
+
+    const bookedSlots = await Booking.find({
+      expertId: expert._id
+    }).select('date timeSlot -_id');
+
+    const bookedSet = new Set(
+      bookedSlots.map((b) => `${b.date}::${b.timeSlot}`)
+    );
+
+    const slotsByDate = expert.availableSlots.map((entry) => ({
+      date: entry.date,
+      slots: entry.slots.map((slot) => ({
+        time: slot,
+        isBooked: bookedSet.has(`${entry.date}::${slot}`)
+      }))
+    }));
+
+    console.log('Expert fetched');
+
+    res.status(StatusCodes.OK).json({
+      ...expert.toObject(),
+      slotsByDate
+    });
+
+  } catch (error) {
+    console.error('Get Expert By ID Error:', error);
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
