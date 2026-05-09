@@ -16,6 +16,10 @@ app.get('/health', (_req, res) => {
 app.use('/experts', expertRoutes);
 app.use('/bookings', bookingRoutes);
 
+app.get('/', (req, res) => {
+  res.json({ message: 'API is running 🚀' });
+});
+
 app.use(notFound);
 app.use(errorHandler);
 
